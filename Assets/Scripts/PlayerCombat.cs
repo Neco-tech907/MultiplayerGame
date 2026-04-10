@@ -7,69 +7,110 @@ namespace MultiplayerGame.Practice1
     public class PlayerCombat : NetworkBehaviour
     {
         [SerializeField] private PlayerNetwork playerNetwork;
-        [SerializeField] private int damage = 10;
-        [SerializeField] private float attackRange = 3f;
+        [SerializeField] private GameObject projectilePrefab;
+        [SerializeField] private Transform firePoint;
+        [SerializeField] private float cooldown = 0.4f;
+        [SerializeField] private int maxAmmo = 10;
+
+        public NetworkVariable<int> CurrentAmmo = new(
+            10,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Server);
+
+        private float lastShotTime;
 
         private void Update()
         {
-            if (!IsOwner || !IsSpawned)
+            if (!IsOwner || !IsSpawned || playerNetwork == null || !playerNetwork.IsAlive.Value)
             {
                 return;
             }
 
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
             {
-                RequestAttackServerRpc();
+                Transform muzzle = firePoint != null ? firePoint : transform;
+                ShootServerRpc(muzzle.position, muzzle.forward);
             }
         }
 
-        [Rpc(SendTo.Server)]
-        private void RequestAttackServerRpc()
+        public override void OnNetworkSpawn()
         {
-            if (playerNetwork == null || !playerNetwork.IsAlive)
+            if (IsServer)
+            {
+                CurrentAmmo.Value = maxAmmo;
+            }
+
+            if (playerNetwork != null)
+            {
+                playerNetwork.IsAlive.OnValueChanged += OnIsAliveChanged;
+            }
+        }
+
+        public override void OnNetworkDespawn()
+        {
+            if (playerNetwork != null)
+            {
+                playerNetwork.IsAlive.OnValueChanged -= OnIsAliveChanged;
+            }
+        }
+
+        [ServerRpc]
+        private void ShootServerRpc(Vector3 position, Vector3 direction, ServerRpcParams rpcParams = default)
+        {
+            if (playerNetwork == null || !playerNetwork.IsAlive.Value)
             {
                 return;
             }
 
-            PlayerNetwork target = FindNearestTarget();
-            if (target == null)
+            if (CurrentAmmo.Value <= 0)
             {
                 return;
             }
 
-            target.ApplyDamage(damage);
-            Debug.Log($"{playerNetwork.Nickname.Value} dealt {damage} damage to {target.Nickname.Value}. Target HP: {target.HP.Value}");
-        }
-
-        private PlayerNetwork FindNearestTarget()
-        {
-            PlayerNetwork[] players = FindObjectsByType<PlayerNetwork>(FindObjectsSortMode.None);
-            PlayerNetwork bestTarget = null;
-            float bestDistance = attackRange;
-
-            foreach (PlayerNetwork candidate in players)
+            if (Time.time < lastShotTime + cooldown)
             {
-                if (candidate == null || candidate == playerNetwork || !candidate.IsSpawned || !candidate.IsAlive)
-                {
-                    continue;
-                }
-
-                float distance = Vector3.Distance(transform.position, candidate.transform.position);
-                if (distance > bestDistance)
-                {
-                    continue;
-                }
-
-                bestDistance = distance;
-                bestTarget = candidate;
+                return;
             }
 
-            return bestTarget;
+            if (projectilePrefab == null)
+            {
+                Debug.LogError("PlayerCombat requires a projectile prefab.");
+                return;
+            }
+
+            Vector3 normalizedDirection = direction.sqrMagnitude > 0.001f ? direction.normalized : transform.forward;
+            GameObject projectileObject = Instantiate(
+                projectilePrefab,
+                position + normalizedDirection * 1.2f,
+                Quaternion.LookRotation(normalizedDirection));
+
+            NetworkObject projectileNetworkObject = projectileObject.GetComponent<NetworkObject>();
+            if (projectileNetworkObject == null)
+            {
+                Debug.LogError("Projectile prefab must contain a NetworkObject component.");
+                Destroy(projectileObject);
+                return;
+            }
+
+            lastShotTime = Time.time;
+            CurrentAmmo.Value--;
+            projectileNetworkObject.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
+        }
+
+        private void OnIsAliveChanged(bool previousValue, bool currentValue)
+        {
+            if (!IsServer || currentValue)
+            {
+                return;
+            }
+
+            CurrentAmmo.Value = maxAmmo;
         }
 
         private void Reset()
         {
             playerNetwork = GetComponent<PlayerNetwork>();
+            firePoint = transform;
         }
 
         private void OnValidate()
@@ -77,6 +118,11 @@ namespace MultiplayerGame.Practice1
             if (playerNetwork == null)
             {
                 playerNetwork = GetComponent<PlayerNetwork>();
+            }
+
+            if (firePoint == null)
+            {
+                firePoint = transform;
             }
         }
     }
