@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: f54a31d5bc51b144a83702dd9d3b6023
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 207815
+  packageName: 'FishNet: Networking Evolved'
+  packageVersion: 4.7.2R
+  assetPath: Assets/FishNet/CodeGenerating/ILCore/FNPostProcessorReflectionImporter.cs
+  uploadId: 901598
