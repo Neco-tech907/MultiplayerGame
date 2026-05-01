@@ -1,12 +1,14 @@
+using FishNet;
+using FishNet.Managing;
+using FishNet.Transporting;
 using TMPro;
-using Unity.Netcode;
-using Unity.Netcode.Transports.UTP;
 using UnityEngine;
 
 namespace MultiplayerGame.Practice1
 {
     public class ConnectionUI : MonoBehaviour
     {
+        private const string DefaultAddress = "127.0.0.1";
         private const ushort DefaultPort = 7777;
 
         [SerializeField] private TMP_InputField nicknameInput;
@@ -16,33 +18,73 @@ namespace MultiplayerGame.Practice1
 
         public static string PlayerNickname { get; private set; } = "Player";
 
+        private void Awake()
+        {
+            if (addressInput != null && string.IsNullOrWhiteSpace(addressInput.text))
+            {
+                addressInput.text = DefaultAddress;
+            }
+
+            if (portInput != null && string.IsNullOrWhiteSpace(portInput.text))
+            {
+                portInput.text = DefaultPort.ToString();
+            }
+        }
+
         public void StartAsHost()
         {
             SaveNickname();
-            ConfigureTransportForLocalSession();
+            if (!TryGetNetworkManager(out NetworkManager networkManager))
+            {
+                return;
+            }
 
-            if (NetworkManager.Singleton.StartHost())
+            string address = addressInput != null && !string.IsNullOrWhiteSpace(addressInput.text)
+                ? addressInput.text.Trim()
+                : DefaultAddress;
+
+            ConfigureTransport(networkManager, address, ParsePort(DefaultPort));
+
+            bool serverStarted = networkManager.ServerManager.StartConnection();
+            bool clientStarted = serverStarted && networkManager.ClientManager.StartConnection();
+
+            if (serverStarted && clientStarted)
             {
                 HideMenu();
             }
             else
             {
-                Debug.LogError("Failed to start Host. Check NetworkManager and UnityTransport configuration.");
+                if (serverStarted)
+                {
+                    networkManager.ClientManager.StopConnection();
+                    networkManager.ServerManager.StopConnection(true);
+                }
+
+                Debug.LogError("Failed to start Host. Check FishNet NetworkManager and Tugboat configuration.");
             }
         }
 
         public void StartAsClient()
         {
             SaveNickname();
-            ConfigureTransportForClient();
+            if (!TryGetNetworkManager(out NetworkManager networkManager))
+            {
+                return;
+            }
 
-            if (NetworkManager.Singleton.StartClient())
+            string address = addressInput != null && !string.IsNullOrWhiteSpace(addressInput.text)
+                ? addressInput.text.Trim()
+                : DefaultAddress;
+
+            ConfigureTransport(networkManager, address, ParsePort(DefaultPort));
+
+            if (networkManager.ClientManager.StartConnection())
             {
                 HideMenu();
             }
             else
             {
-                Debug.LogError("Failed to start Client. Check the host address, port, and transport configuration.");
+                Debug.LogError("Failed to start Client. Check the host address, port, and Tugboat configuration.");
             }
         }
 
@@ -52,30 +94,16 @@ namespace MultiplayerGame.Practice1
             PlayerNickname = string.IsNullOrWhiteSpace(rawValue) ? "Player" : rawValue.Trim();
         }
 
-        private void ConfigureTransportForLocalSession()
+        private void ConfigureTransport(NetworkManager networkManager, string address, ushort port)
         {
-            if (!TryGetTransport(out UnityTransport transport))
+            if (!TryGetTransport(networkManager, out Transport transport))
             {
                 return;
             }
 
-            ushort port = ParsePort(DefaultPort);
-            transport.SetConnectionData("127.0.0.1", port, "0.0.0.0");
-        }
-
-        private void ConfigureTransportForClient()
-        {
-            if (!TryGetTransport(out UnityTransport transport))
-            {
-                return;
-            }
-
-            string address = addressInput != null && !string.IsNullOrWhiteSpace(addressInput.text)
-                ? addressInput.text.Trim()
-                : "127.0.0.1";
-
-            ushort port = ParsePort(DefaultPort);
-            transport.SetConnectionData(address, port);
+            transport.SetClientAddress(address);
+            transport.SetServerBindAddress("0.0.0.0", IPAddressType.IPv4);
+            transport.SetPort(port);
         }
 
         private ushort ParsePort(ushort fallback)
@@ -88,16 +116,29 @@ namespace MultiplayerGame.Practice1
             return ushort.TryParse(portInput.text, out ushort parsedPort) ? parsedPort : fallback;
         }
 
-        private bool TryGetTransport(out UnityTransport transport)
+        private bool TryGetNetworkManager(out NetworkManager networkManager)
         {
-            transport = NetworkManager.Singleton != null ? NetworkManager.Singleton.GetComponent<UnityTransport>() : null;
+            networkManager = InstanceFinder.NetworkManager;
+
+            if (networkManager != null)
+            {
+                return true;
+            }
+
+            Debug.LogError("FishNet NetworkManager was not found in the scene.");
+            return false;
+        }
+
+        private bool TryGetTransport(NetworkManager networkManager, out Transport transport)
+        {
+            transport = networkManager != null ? networkManager.TransportManager.Transport : null;
 
             if (transport != null)
             {
                 return true;
             }
 
-            Debug.LogError("UnityTransport component was not found on the NetworkManager object.");
+            Debug.LogError("FishNet transport was not found on the NetworkManager object.");
             return false;
         }
 

@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 namespace MultiplayerGame.Practice1
@@ -19,7 +19,7 @@ namespace MultiplayerGame.Practice1
 
         private void OnTriggerEnter(Collider other)
         {
-            if (!IsServer || !IsSpawned)
+            if (!base.IsServerInitialized)
             {
                 return;
             }
@@ -37,7 +37,7 @@ namespace MultiplayerGame.Practice1
 
             player.ApplyHeal(healAmount);
             manager?.OnPickedUp(spawnPosition);
-            NetworkObject.Despawn(true);
+            base.Despawn();
         }
     }
 }

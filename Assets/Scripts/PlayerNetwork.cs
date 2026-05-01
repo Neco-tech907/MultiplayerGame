@@ -1,5 +1,5 @@
-using Unity.Collections;
-using Unity.Netcode;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
 using System.Collections;
 
@@ -16,55 +16,52 @@ namespace MultiplayerGame.Practice1
         [Header("Spawn")]
         [SerializeField] private float spawnSpacing = 2.5f;
         [SerializeField] private bool useSceneSpawnPoints = true;
+        [SerializeField] private PlayerView playerView;
 
-        public NetworkVariable<FixedString32Bytes> Nickname = new(
-            default,
-            NetworkVariableReadPermission.Everyone,
-            NetworkVariableWritePermission.Server);
+        public readonly SyncVar<string> Nickname = new("Player");
 
-        public NetworkVariable<int> HP = new(
-            100,
-            NetworkVariableReadPermission.Everyone,
-            NetworkVariableWritePermission.Server);
+        public readonly SyncVar<int> HP = new(100);
 
-        public NetworkVariable<bool> IsAlive = new(
-            true,
-            NetworkVariableReadPermission.Everyone,
-            NetworkVariableWritePermission.Server);
+        public readonly SyncVar<bool> IsAlive = new(true);
 
         private Coroutine respawnRoutine;
 
-        public override void OnNetworkSpawn()
+        private void Awake()
         {
-            HP.OnValueChanged += OnHpChanged;
-            IsAlive.OnValueChanged += OnIsAliveChanged;
+            CacheReferences();
+            Nickname.OnChange += OnNicknameChanged;
+            HP.OnChange += OnHpChanged;
+            IsAlive.OnChange += OnIsAliveChanged;
+        }
 
-            if (IsServer)
+        public override void OnStartNetwork()
+        {
+            CacheReferences();
+
+            if (base.IsServerInitialized)
             {
                 HP.Value = maxHp;
                 IsAlive.Value = true;
                 AssignSpawnPosition();
             }
 
-            if (IsOwner)
-            {
-                SubmitNicknameServerRpc(ConnectionUI.PlayerNickname);
-            }
-
-            OnIsAliveChanged(IsAlive.Value, IsAlive.Value);
+            ApplyViewState();
+            ApplyAliveState(IsAlive.Value);
         }
 
-        public override void OnNetworkDespawn()
+        public override void OnStartClient()
         {
-            HP.OnValueChanged -= OnHpChanged;
-            IsAlive.OnValueChanged -= OnIsAliveChanged;
+            if (base.IsOwner)
+            {
+                SetNicknameServerRpc(ConnectionUI.PlayerNickname);
+            }
         }
 
         public int MaxHp => maxHp;
 
         public void ApplyDamage(int damage)
         {
-            if (!IsServer || !IsAlive.Value)
+            if (!base.IsServerInitialized || !IsAlive.Value)
             {
                 return;
             }
@@ -75,7 +72,7 @@ namespace MultiplayerGame.Practice1
 
         public void ApplyHeal(int amount)
         {
-            if (!IsServer || !IsAlive.Value)
+            if (!base.IsServerInitialized || !IsAlive.Value)
             {
                 return;
             }
@@ -85,7 +82,7 @@ namespace MultiplayerGame.Practice1
         }
 
         [ServerRpc]
-        private void SubmitNicknameServerRpc(string nickname)
+        private void SetNicknameServerRpc(string nickname)
         {
             Nickname.Value = NormalizeNickname(nickname);
         }
@@ -93,7 +90,7 @@ namespace MultiplayerGame.Practice1
         private string NormalizeNickname(string rawNickname)
         {
             return string.IsNullOrWhiteSpace(rawNickname)
-                ? $"Player_{OwnerClientId}"
+                ? $"Player_{OwnerId}"
                 : rawNickname.Trim();
         }
 
@@ -105,18 +102,26 @@ namespace MultiplayerGame.Practice1
                 return;
             }
 
-            float xOffset = (int)OwnerClientId * spawnSpacing;
+            float xOffset = OwnerId * spawnSpacing;
             TeleportTo(new Vector3(xOffset, transform.position.y, 0f));
         }
 
-        private void OnHpChanged(int previousValue, int newValue)
+        private void OnNicknameChanged(string previousValue, string newValue, bool asServer)
         {
-            if (!IsServer)
+            if (playerView != null)
             {
-                return;
+                playerView.SetNickname(newValue);
+            }
+        }
+
+        private void OnHpChanged(int previousValue, int newValue, bool asServer)
+        {
+            if (playerView != null)
+            {
+                playerView.SetHp(newValue);
             }
 
-            if (newValue > 0 || !IsAlive.Value)
+            if (!asServer || newValue > 0 || !IsAlive.Value)
             {
                 return;
             }
@@ -131,12 +136,9 @@ namespace MultiplayerGame.Practice1
             respawnRoutine = StartCoroutine(RespawnRoutine());
         }
 
-        private void OnIsAliveChanged(bool previousValue, bool newValue)
+        private void OnIsAliveChanged(bool previousValue, bool newValue, bool asServer)
         {
-            if (modelRoot != null)
-            {
-                modelRoot.SetActive(newValue);
-            }
+            ApplyAliveState(newValue);
         }
 
         private IEnumerator RespawnRoutine()
@@ -163,7 +165,7 @@ namespace MultiplayerGame.Practice1
                 return false;
             }
 
-            int index = Mathf.Abs((int)(OwnerClientId % (ulong)spawnPoints.Length));
+            int index = Mathf.Abs(OwnerId % spawnPoints.Length);
             spawnPosition = spawnPoints[index].transform.position;
             return true;
         }
@@ -183,6 +185,46 @@ namespace MultiplayerGame.Practice1
             if (restoreCharacterController)
             {
                 characterController.enabled = true;
+            }
+        }
+
+        private void CacheReferences()
+        {
+            if (playerView == null)
+            {
+                playerView = GetComponent<PlayerView>();
+            }
+        }
+
+        private void ApplyViewState()
+        {
+            if (playerView == null)
+            {
+                return;
+            }
+
+            playerView.SetNickname(Nickname.Value);
+            playerView.SetHp(HP.Value);
+        }
+
+        private void ApplyAliveState(bool newValue)
+        {
+            if (modelRoot != null)
+            {
+                modelRoot.SetActive(newValue);
+            }
+        }
+
+        private void Reset()
+        {
+            playerView = GetComponent<PlayerView>();
+        }
+
+        private void OnValidate()
+        {
+            if (playerView == null)
+            {
+                playerView = GetComponent<PlayerView>();
             }
         }
     }

@@ -1,5 +1,6 @@
 using System.Collections;
-using Unity.Netcode;
+using FishNet;
+using FishNet.Object;
 using UnityEngine;
 
 namespace MultiplayerGame.Practice1
@@ -12,11 +13,6 @@ namespace MultiplayerGame.Practice1
 
         private bool hasSpawnedInitialPickups;
 
-        private void Start()
-        {
-            TryInitialize();
-        }
-
         private void Update()
         {
             if (hasSpawnedInitialPickups)
@@ -24,7 +20,7 @@ namespace MultiplayerGame.Practice1
                 return;
             }
 
-            if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening)
+            if (InstanceFinder.NetworkManager == null || !InstanceFinder.NetworkManager.IsServerStarted)
             {
                 return;
             }
@@ -32,30 +28,9 @@ namespace MultiplayerGame.Practice1
             TryInitialize();
         }
 
-        private void OnEnable()
-        {
-            if (NetworkManager.Singleton != null)
-            {
-                NetworkManager.Singleton.OnServerStarted += OnServerStarted;
-            }
-        }
-
-        private void OnDisable()
-        {
-            if (NetworkManager.Singleton != null)
-            {
-                NetworkManager.Singleton.OnServerStarted -= OnServerStarted;
-            }
-        }
-
-        private void OnServerStarted()
-        {
-            TryInitialize();
-        }
-
         public void OnPickedUp(Vector3 position)
         {
-            if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer)
+            if (InstanceFinder.NetworkManager == null || !InstanceFinder.NetworkManager.IsServerStarted)
             {
                 return;
             }
@@ -97,7 +72,7 @@ namespace MultiplayerGame.Practice1
 
             GameObject pickupObject = Instantiate(healthPickupPrefab, position, Quaternion.identity);
             HealthPickup healthPickup = pickupObject.GetComponent<HealthPickup>();
-            NetworkObject networkObject = pickupObject.GetComponent<NetworkObject>();
+            FishNet.Object.NetworkObject networkObject = pickupObject.GetComponent<FishNet.Object.NetworkObject>();
 
             if (healthPickup == null || networkObject == null)
             {
@@ -107,7 +82,7 @@ namespace MultiplayerGame.Practice1
             }
 
             healthPickup.Init(this);
-            networkObject.Spawn();
+            InstanceFinder.ServerManager.Spawn(networkObject);
         }
 
         private bool TryFindSpawnPoints(out Transform[] foundPoints)
@@ -130,7 +105,7 @@ namespace MultiplayerGame.Practice1
 
         private void TryInitialize()
         {
-            if (hasSpawnedInitialPickups || NetworkManager.Singleton == null || !NetworkManager.Singleton.IsListening || !NetworkManager.Singleton.IsServer)
+            if (hasSpawnedInitialPickups || InstanceFinder.NetworkManager == null || !InstanceFinder.NetworkManager.IsServerStarted)
             {
                 return;
             }

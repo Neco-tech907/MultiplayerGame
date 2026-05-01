@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 namespace MultiplayerGame.Practice1
@@ -9,9 +9,9 @@ namespace MultiplayerGame.Practice1
 
         private Camera playerCamera;
 
-        public override void OnNetworkSpawn()
+        public override void OnStartClient()
         {
-            if (!IsOwner)
+            if (!base.IsOwner)
             {
                 enabled = false;
                 return;

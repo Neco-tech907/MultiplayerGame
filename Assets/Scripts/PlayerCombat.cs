@@ -1,4 +1,6 @@
-using Unity.Netcode;
+using FishNet.Connection;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -12,50 +14,20 @@ namespace MultiplayerGame.Practice1
         [SerializeField] private float cooldown = 0.4f;
         [SerializeField] private int maxAmmo = 10;
 
-        public NetworkVariable<int> CurrentAmmo = new(
-            10,
-            NetworkVariableReadPermission.Everyone,
-            NetworkVariableWritePermission.Server);
+        public readonly SyncVar<int> CurrentAmmo = new(10);
 
         private float lastShotTime;
 
-        private void Update()
+        public override void OnStartNetwork()
         {
-            if (!IsOwner || !IsSpawned || playerNetwork == null || !playerNetwork.IsAlive.Value)
-            {
-                return;
-            }
-
-            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
-            {
-                Transform muzzle = firePoint != null ? firePoint : transform;
-                ShootServerRpc(muzzle.position, muzzle.forward);
-            }
-        }
-
-        public override void OnNetworkSpawn()
-        {
-            if (IsServer)
+            if (base.IsServerInitialized)
             {
                 CurrentAmmo.Value = maxAmmo;
-            }
-
-            if (playerNetwork != null)
-            {
-                playerNetwork.IsAlive.OnValueChanged += OnIsAliveChanged;
-            }
-        }
-
-        public override void OnNetworkDespawn()
-        {
-            if (playerNetwork != null)
-            {
-                playerNetwork.IsAlive.OnValueChanged -= OnIsAliveChanged;
             }
         }
 
         [ServerRpc]
-        private void ShootServerRpc(Vector3 position, Vector3 direction, ServerRpcParams rpcParams = default)
+        private void ShootServerRpc(Vector3 position, Vector3 direction, NetworkConnection sender = null)
         {
             if (playerNetwork == null || !playerNetwork.IsAlive.Value)
             {
@@ -84,7 +56,7 @@ namespace MultiplayerGame.Practice1
                 position + normalizedDirection * 1.2f,
                 Quaternion.LookRotation(normalizedDirection));
 
-            NetworkObject projectileNetworkObject = projectileObject.GetComponent<NetworkObject>();
+            FishNet.Object.NetworkObject projectileNetworkObject = projectileObject.GetComponent<FishNet.Object.NetworkObject>();
             if (projectileNetworkObject == null)
             {
                 Debug.LogError("Projectile prefab must contain a NetworkObject component.");
@@ -94,12 +66,26 @@ namespace MultiplayerGame.Practice1
 
             lastShotTime = Time.time;
             CurrentAmmo.Value--;
-            projectileNetworkObject.SpawnWithOwnership(rpcParams.Receive.SenderClientId);
+            base.ServerManager.Spawn(projectileNetworkObject, sender);
         }
 
-        private void OnIsAliveChanged(bool previousValue, bool currentValue)
+        private void Update()
         {
-            if (!IsServer || currentValue)
+            if (!base.IsOwner || !base.IsClientInitialized || playerNetwork == null || !playerNetwork.IsAlive.Value)
+            {
+                return;
+            }
+
+            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+            {
+                Transform muzzle = firePoint != null ? firePoint : transform;
+                ShootServerRpc(muzzle.position, muzzle.forward);
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (!base.IsServerInitialized || playerNetwork == null || playerNetwork.IsAlive.Value || CurrentAmmo.Value == maxAmmo)
             {
                 return;
             }

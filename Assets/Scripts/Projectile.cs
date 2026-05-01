@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 namespace MultiplayerGame.Practice1
@@ -14,7 +14,7 @@ namespace MultiplayerGame.Practice1
 
         private void Update()
         {
-            if (!IsServer)
+            if (!base.IsServerInitialized)
             {
                 return;
             }
@@ -24,13 +24,13 @@ namespace MultiplayerGame.Practice1
             aliveTime += Time.deltaTime;
             if (aliveTime >= lifetime)
             {
-                NetworkObject.Despawn(true);
+                base.Despawn();
             }
         }
 
         private void OnTriggerEnter(Collider other)
         {
-            if (!IsServer || !IsSpawned)
+            if (!base.IsServerInitialized)
             {
                 return;
             }
@@ -38,7 +38,7 @@ namespace MultiplayerGame.Practice1
             PlayerNetwork target = other.GetComponent<PlayerNetwork>();
             if (target != null)
             {
-                if (!target.IsAlive.Value || target.OwnerClientId == OwnerClientId)
+                if (!target.IsAlive.Value || target.OwnerId == OwnerId)
                 {
                     return;
                 }
@@ -46,7 +46,7 @@ namespace MultiplayerGame.Practice1
                 target.ApplyDamage(damage);
             }
 
-            NetworkObject.Despawn(true);
+            base.Despawn();
         }
     }
 }

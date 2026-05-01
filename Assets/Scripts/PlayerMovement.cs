@@ -1,11 +1,36 @@
-using Unity.Netcode;
+using FishNet.Object.Prediction;
+using FishNet.Transporting;
+using FishNet.Utility.Template;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace MultiplayerGame.Practice1
 {
+    public struct MoveData : IReplicateData
+    {
+        public Vector2 MoveInput;
+
+        private uint _tick;
+
+        public void Dispose() { }
+        public uint GetTick() => _tick;
+        public void SetTick(uint value) => _tick = value;
+    }
+
+    public struct ReconcileData : IReconcileData
+    {
+        public Vector3 Position;
+        public float VerticalVelocity;
+
+        private uint _tick;
+
+        public void Dispose() { }
+        public uint GetTick() => _tick;
+        public void SetTick(uint value) => _tick = value;
+    }
+
     [RequireComponent(typeof(CharacterController))]
-    public class PlayerMovement : NetworkBehaviour
+    public class PlayerMovement : TickNetworkBehaviour
     {
         [SerializeField] private float speed = 5f;
         [SerializeField] private float gravity = -9.81f;
@@ -13,55 +38,96 @@ namespace MultiplayerGame.Practice1
 
         private CharacterController characterController;
         private float verticalVelocity;
-        private Vector2 currentMoveInput;
 
         private void Awake()
         {
             characterController = GetComponent<CharacterController>();
+            SetTickCallbacks(TickCallback.Tick | TickCallback.PostTick);
         }
 
-        private void Update()
+        protected override void TimeManager_OnTick()
         {
-            if (!IsSpawned || playerNetwork == null)
+            if (!base.IsClientInitialized && !base.IsServerInitialized)
             {
                 return;
             }
 
-            if (IsOwner)
-            {
-                currentMoveInput = playerNetwork.IsAlive.Value ? ReadMoveInput() : Vector2.zero;
-                SubmitMoveInputServerRpc(currentMoveInput);
-            }
+            RunMove(BuildMoveData());
+        }
 
-            if (!IsServer || !playerNetwork.IsAlive.Value)
+        protected override void TimeManager_OnPostTick()
+        {
+            if (!base.IsServerInitialized && !base.IsClientInitialized)
             {
                 return;
             }
 
-            Vector2 moveInput = currentMoveInput;
-            Vector3 move = new Vector3(moveInput.x, 0f, moveInput.y);
-            if (move.sqrMagnitude > 1f)
+            CreateReconcile();
+        }
+
+        public override void CreateReconcile()
+        {
+            SendReconcile(new ReconcileData
             {
-                move.Normalize();
+                Position = transform.position,
+                VerticalVelocity = verticalVelocity
+            });
+        }
+
+        private MoveData BuildMoveData()
+        {
+            if (!base.IsOwner || playerNetwork == null || !playerNetwork.IsAlive.Value)
+            {
+                return default;
             }
 
-            move *= speed;
+            return new MoveData
+            {
+                MoveInput = Vector2.ClampMagnitude(ReadMoveInput(), 1f)
+            };
+        }
+
+        [Replicate]
+        private void RunMove(
+            MoveData data,
+            ReplicateState state = ReplicateState.Invalid,
+            Channel channel = Channel.Unreliable)
+        {
+            if (characterController == null || playerNetwork == null || !playerNetwork.IsAlive.Value)
+            {
+                return;
+            }
+
+            float delta = (float)base.TimeManager.TickDelta;
+            Vector2 input = Vector2.ClampMagnitude(data.MoveInput, 1f);
+            Vector3 move = new Vector3(input.x, 0f, input.y) * speed;
 
             if (characterController.isGrounded && verticalVelocity < 0f)
             {
                 verticalVelocity = 0f;
             }
 
-            verticalVelocity += gravity * Time.deltaTime;
+            verticalVelocity += gravity * delta;
             move.y = verticalVelocity;
-
-            characterController.Move(move * Time.deltaTime);
+            characterController.Move(move * delta);
         }
 
-        [ServerRpc]
-        private void SubmitMoveInputServerRpc(Vector2 moveInput)
+        [Reconcile]
+        private void SendReconcile(ReconcileData data, Channel channel = Channel.Unreliable)
         {
-            currentMoveInput = Vector2.ClampMagnitude(moveInput, 1f);
+            verticalVelocity = data.VerticalVelocity;
+
+            if (characterController != null)
+            {
+                characterController.enabled = false;
+            }
+
+            transform.position = data.Position;
+
+            if (characterController != null)
+            {
+                characterController.enabled = true;
+            }
         }
 
         private Vector2 ReadMoveInput()

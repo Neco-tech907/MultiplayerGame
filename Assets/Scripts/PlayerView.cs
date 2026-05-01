@@ -1,6 +1,5 @@
 using TMPro;
-using Unity.Collections;
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 namespace MultiplayerGame.Practice1
@@ -11,45 +10,28 @@ namespace MultiplayerGame.Practice1
         [SerializeField] private TMP_Text nicknameText;
         [SerializeField] private TMP_Text hpText;
 
-        public override void OnNetworkSpawn()
+        public override void OnStartNetwork()
         {
-            if (playerNetwork == null)
+            if (playerNetwork != null)
             {
-                Debug.LogError("PlayerView requires a PlayerNetwork reference.");
-                return;
+                SetNickname(playerNetwork.Nickname.Value);
+                SetHp(playerNetwork.HP.Value);
             }
-
-            playerNetwork.Nickname.OnValueChanged += OnNicknameChanged;
-            playerNetwork.HP.OnValueChanged += OnHpChanged;
-
-            OnNicknameChanged(default, playerNetwork.Nickname.Value);
-            OnHpChanged(0, playerNetwork.HP.Value);
         }
 
-        public override void OnNetworkDespawn()
-        {
-            if (playerNetwork == null)
-            {
-                return;
-            }
-
-            playerNetwork.Nickname.OnValueChanged -= OnNicknameChanged;
-            playerNetwork.HP.OnValueChanged -= OnHpChanged;
-        }
-
-        private void OnNicknameChanged(FixedString32Bytes oldValue, FixedString32Bytes newValue)
+        public void SetNickname(string value)
         {
             if (nicknameText != null)
             {
-                nicknameText.text = newValue.ToString();
+                nicknameText.text = value;
             }
         }
 
-        private void OnHpChanged(int oldValue, int newValue)
+        public void SetHp(int value)
         {
             if (hpText != null)
             {
-                hpText.text = $"HP: {newValue}";
+                hpText.text = $"HP: {value}";
             }
         }
 
