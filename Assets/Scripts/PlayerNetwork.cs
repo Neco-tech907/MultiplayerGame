@@ -24,6 +24,8 @@ namespace MultiplayerGame.Practice1
 
         public readonly SyncVar<bool> IsAlive = new(true);
 
+        public readonly SyncVar<int> Score = new(0);
+
         private Coroutine respawnRoutine;
 
         private void Awake()
@@ -32,6 +34,7 @@ namespace MultiplayerGame.Practice1
             Nickname.OnChange += OnNicknameChanged;
             HP.OnChange += OnHpChanged;
             IsAlive.OnChange += OnIsAliveChanged;
+            Score.OnChange += OnScoreChanged;
         }
 
         public override void OnStartNetwork()
@@ -42,6 +45,7 @@ namespace MultiplayerGame.Practice1
             {
                 HP.Value = maxHp;
                 IsAlive.Value = true;
+                Score.Value = 0;
                 AssignSpawnPosition();
             }
 
@@ -59,7 +63,7 @@ namespace MultiplayerGame.Practice1
 
         public int MaxHp => maxHp;
 
-        public void ApplyDamage(int damage)
+        public void ApplyDamage(int damage, PlayerNetwork attacker = null)
         {
             if (!base.IsServerInitialized || !IsAlive.Value)
             {
@@ -67,7 +71,15 @@ namespace MultiplayerGame.Practice1
             }
 
             int clampedDamage = Mathf.Max(0, damage);
-            HP.Value = Mathf.Max(0, HP.Value - clampedDamage);
+            int nextHp = Mathf.Max(0, HP.Value - clampedDamage);
+            bool wasEliminated = nextHp == 0 && HP.Value > 0;
+
+            HP.Value = nextHp;
+
+            if (wasEliminated && attacker != null && attacker != this)
+            {
+                attacker.AddScore(1);
+            }
         }
 
         public void ApplyHeal(int amount)
@@ -79,6 +91,56 @@ namespace MultiplayerGame.Practice1
 
             int clampedHeal = Mathf.Max(0, amount);
             HP.Value = Mathf.Min(maxHp, HP.Value + clampedHeal);
+        }
+
+        public void AddScore(int amount)
+        {
+            if (!base.IsServerInitialized)
+            {
+                return;
+            }
+
+            Score.Value = Mathf.Max(0, Score.Value + Mathf.Max(0, amount));
+            GameManager.Instance?.NotifyScoreChanged(this);
+        }
+
+        public void ResetForLobby()
+        {
+            if (!base.IsServerInitialized)
+            {
+                return;
+            }
+
+            if (respawnRoutine != null)
+            {
+                StopCoroutine(respawnRoutine);
+                respawnRoutine = null;
+            }
+
+            Score.Value = 0;
+            HP.Value = maxHp;
+            IsAlive.Value = true;
+            AssignSpawnPosition();
+            ResetCombatState();
+        }
+
+        public void ResetForMatchStart()
+        {
+            if (!base.IsServerInitialized)
+            {
+                return;
+            }
+
+            if (respawnRoutine != null)
+            {
+                StopCoroutine(respawnRoutine);
+                respawnRoutine = null;
+            }
+
+            HP.Value = maxHp;
+            IsAlive.Value = true;
+            AssignSpawnPosition();
+            ResetCombatState();
         }
 
         [ServerRpc]
@@ -139,6 +201,14 @@ namespace MultiplayerGame.Practice1
         private void OnIsAliveChanged(bool previousValue, bool newValue, bool asServer)
         {
             ApplyAliveState(newValue);
+        }
+
+        private void OnScoreChanged(int previousValue, int newValue, bool asServer)
+        {
+            if (playerView != null)
+            {
+                playerView.SetScore(newValue);
+            }
         }
 
         private IEnumerator RespawnRoutine()
@@ -205,6 +275,7 @@ namespace MultiplayerGame.Practice1
 
             playerView.SetNickname(Nickname.Value);
             playerView.SetHp(HP.Value);
+            playerView.SetScore(Score.Value);
         }
 
         private void ApplyAliveState(bool newValue)
@@ -225,6 +296,15 @@ namespace MultiplayerGame.Practice1
             if (playerView == null)
             {
                 playerView = GetComponent<PlayerView>();
+            }
+        }
+
+        private void ResetCombatState()
+        {
+            PlayerCombat combat = GetComponent<PlayerCombat>();
+            if (combat != null)
+            {
+                combat.ServerResetAmmo();
             }
         }
     }

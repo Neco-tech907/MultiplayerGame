@@ -9,7 +9,7 @@ namespace MultiplayerGame.Practice1
     public class ConnectionUI : MonoBehaviour
     {
         private const string DefaultAddress = "127.0.0.1";
-        private const ushort DefaultPort = 7777;
+        private const ushort DefaultPort = 7770;
 
         [SerializeField] private TMP_InputField nicknameInput;
         [SerializeField] private TMP_InputField addressInput;

@@ -9,6 +9,7 @@ namespace MultiplayerGame.Practice1
         [SerializeField] private PlayerNetwork playerNetwork;
         [SerializeField] private TMP_Text nicknameText;
         [SerializeField] private TMP_Text hpText;
+        [SerializeField] private TMP_Text scoreText;
 
         public override void OnStartNetwork()
         {
@@ -16,6 +17,7 @@ namespace MultiplayerGame.Practice1
             {
                 SetNickname(playerNetwork.Nickname.Value);
                 SetHp(playerNetwork.HP.Value);
+                SetScore(playerNetwork.Score.Value);
             }
         }
 
@@ -32,6 +34,14 @@ namespace MultiplayerGame.Practice1
             if (hpText != null)
             {
                 hpText.text = $"HP: {value}";
+            }
+        }
+
+        public void SetScore(int value)
+        {
+            if (scoreText != null)
+            {
+                scoreText.text = $"Score: {value}";
             }
         }
 

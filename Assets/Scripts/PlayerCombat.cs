@@ -29,7 +29,7 @@ namespace MultiplayerGame.Practice1
         [ServerRpc]
         private void ShootServerRpc(Vector3 position, Vector3 direction, NetworkConnection sender = null)
         {
-            if (playerNetwork == null || !playerNetwork.IsAlive.Value)
+            if (playerNetwork == null || !playerNetwork.IsAlive.Value || GameManager.Instance == null || !GameManager.Instance.IsMatchInProgress)
             {
                 return;
             }
@@ -66,12 +66,22 @@ namespace MultiplayerGame.Practice1
 
             lastShotTime = Time.time;
             CurrentAmmo.Value--;
+            Projectile projectile = projectileObject.GetComponent<Projectile>();
+            if (projectile != null)
+            {
+                projectile.SetShooter(playerNetwork);
+            }
             base.ServerManager.Spawn(projectileNetworkObject, sender);
         }
 
         private void Update()
         {
             if (!base.IsOwner || !base.IsClientInitialized || playerNetwork == null || !playerNetwork.IsAlive.Value)
+            {
+                return;
+            }
+
+            if (GameManager.Instance == null || !GameManager.Instance.IsMatchInProgress)
             {
                 return;
             }
@@ -110,6 +120,16 @@ namespace MultiplayerGame.Practice1
             {
                 firePoint = transform;
             }
+        }
+
+        public void ServerResetAmmo()
+        {
+            if (!base.IsServerInitialized)
+            {
+                return;
+            }
+
+            CurrentAmmo.Value = maxAmmo;
         }
     }
 }

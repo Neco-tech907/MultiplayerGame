@@ -81,6 +81,11 @@ namespace MultiplayerGame.Practice1
                 return default;
             }
 
+            if (GameManager.Instance == null || !GameManager.Instance.IsMatchInProgress)
+            {
+                return default;
+            }
+
             return new MoveData
             {
                 MoveInput = Vector2.ClampMagnitude(ReadMoveInput(), 1f)
@@ -94,6 +99,11 @@ namespace MultiplayerGame.Practice1
             Channel channel = Channel.Unreliable)
         {
             if (characterController == null || playerNetwork == null || !playerNetwork.IsAlive.Value)
+            {
+                return;
+            }
+
+            if (GameManager.Instance == null || !GameManager.Instance.IsMatchInProgress)
             {
                 return;
             }

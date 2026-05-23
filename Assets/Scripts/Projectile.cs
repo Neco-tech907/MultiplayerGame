@@ -11,6 +11,12 @@ namespace MultiplayerGame.Practice1
         [SerializeField] private float lifetime = 3f;
 
         private float aliveTime;
+        private PlayerNetwork shooter;
+
+        public void SetShooter(PlayerNetwork value)
+        {
+            shooter = value;
+        }
 
         private void Update()
         {
@@ -43,7 +49,7 @@ namespace MultiplayerGame.Practice1
                     return;
                 }
 
-                target.ApplyDamage(damage);
+                target.ApplyDamage(damage, shooter);
             }
 
             base.Despawn();
