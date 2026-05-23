@@ -12,9 +12,9 @@ namespace MultiplayerGame.Practice1
         [SerializeField] private GameObject projectilePrefab;
         [SerializeField] private Transform firePoint;
         [SerializeField] private float cooldown = 0.4f;
-        [SerializeField] private int maxAmmo = 10;
+        [SerializeField] private int maxAmmo = 30;
 
-        public readonly SyncVar<int> CurrentAmmo = new(10);
+        public readonly SyncVar<int> CurrentAmmo = new(30);
 
         private float lastShotTime;
 
